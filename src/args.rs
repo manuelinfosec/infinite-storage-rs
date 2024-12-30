@@ -1,4 +1,4 @@
-use clap::{Args, Command, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 pub struct Arguments {
