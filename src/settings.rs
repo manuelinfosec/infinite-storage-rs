@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 /// Represents the output mode of the data.
 /// `Binary` for binary output, `Color` for color data.
 pub enum OutputMode {
@@ -91,6 +93,7 @@ impl Data {
 /// Represents the configuration settings.
 /// This struct is designed to encapsulate various parameters such as size, threading,
 /// frames per second (FPS), and dimensions (width and height) for a customizable setup.
+#[derive(Deserialize, Default)]
 pub struct Settings {
     /// Size of the block or data unit used in the operation.
     /// Example use case: In video encoding, this might represent the block size in pixels.
@@ -98,7 +101,7 @@ pub struct Settings {
 
     /// Number of threads to be used for parallel processing.
     /// A higher thread count can improve performance on multi-core systems.
-    pub thread: usize,
+    pub threads: usize,
 
     /// Frames per second (FPS) setting for output, affecting video playback smoothness.
     /// Higher FPS values result in smoother playback but may increase processing load.
