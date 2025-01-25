@@ -330,3 +330,128 @@ fn etch_bw(
     return Ok(());
 }
 
+/// Reads black-and-white (binary) data from a source image by sampling pixel values
+/// at intervals defined by the specified block size.
+///
+/// # Arguments
+/// * `source` - A reference to an `EmbedSource` containing the image and related metadata.
+/// * `current_frame` - The index of the current frame being processed.
+/// * `final_frame` - The index of the last frame to process. Used to determine if this is the final frame.
+/// * `final_bit` - The number of bits to retain in the final frame. Only used if `current_frame == final_frame`.
+///
+/// # Returns
+/// * `anyhow::Result<Vec<bool>>` - A vector of boolean values representing the binary data
+///   extracted from the image. Returns an error if something goes wrong during processing.
+fn read_bw(
+    source: &EmbedSource,
+    current_frame: i32,
+    final_frame: i32,
+    final_bit: i32,
+) -> anyhow::Result<Vec<bool>> {
+    // Extract the width and height of the source image.
+    let width: i32 = source.actual_size.width;
+    let height = source.actual_size.height;
+
+    // Block size determines the step size for sampling pixels in both x and y directions.
+    let size = source.size as usize;
+
+    // Initialize an empty vector to store the binary data extracted from the image.
+    let mut binary_data: Vec<bool> = Vec::new();
+
+    // Iterate over the image's pixels using a step size equal to the block size.
+    // This effectively divides the image into a grid and samples one pixel per block.
+    for y in (0..height).step_by(size) {
+        for x in (0..width).step_by(size) {
+            // Retrieve the RGB value of the pixel at (x, y).
+            let rgb = get_pixel(&source, x, y);
+
+            // If the pixel is out of bounds or cannot be retrieved, skip to the next iteration.
+            if rgb.is_none() {
+                continue;
+            } else {
+                // Unwrap the RGB value (since it's guaranteed to exist at this point).
+                let rgb = rgb.unwrap();
+
+                // Convert the red channel's value to a boolean.
+                // If the red channel's value is >= 127, it's considered `true` (white).
+                // Otherwise, it's considered `false` (black).
+                if rgb[0] >= 127 {
+                    binary_data.push(true);
+                } else {
+                    binary_data.push(false);
+                }
+            }
+        }
+    }
+
+    // If this is the final frame, truncate the binary data to the specified length (`final_bit`).
+    if current_frame == final_frame {
+        // Slice the binary data to retain only the first `final_bit` elements.
+        let slice = binary_data[0..final_bit as usize].to_vec();
+        return Ok(slice); // Return the truncated binary data.
+    }
+
+    // Return the full binary data for non-final frames.
+    Ok(binary_data)
+}
+
+/// Reads color data (RGB bytes) from a source image by sampling pixel values
+/// at intervals defined by the specified block size.
+///
+/// # Arguments
+/// * `source` - A reference to an `EmbedSource` containing the image and related metadata.
+/// * `current_frame` - The index of the current frame being processed.
+/// * `final_frame` - The index of the last frame to process. Used to determine if this is the final frame.
+/// * `final_byte` - The number of bytes to retain in the final frame. Only used if `current_frame == final_frame`.
+///
+/// # Returns
+/// * `anyhow::Result<Vec<u8>>` - A vector of `u8` values representing the RGB data
+///   extracted from the image. Returns an error if something goes wrong during processing.
+fn read_color(
+    source: &EmbedSource,
+    current_frame: i32,
+    final_frame: i32,
+    final_byte: i32,
+) -> anyhow::Result<Vec<u8>> {
+    // Get the width and height of the source image.
+    let width = source.actual_size.width;
+    let height = source.actual_size.height;
+
+    // Block size determines the step size for sampling pixels in both x and y directions.
+    let size = source.size as usize;
+
+    // Initialize an empty vector to store the byte data extracted from the image.
+    let mut byte_data: Vec<u8> = Vec::new();
+
+    // Iterate over the image's pixels using a step size equal to the block size.
+    // This effectively divides the image into a grid and samples one pixel per block.
+    for y in (0..height).step_by(size) {
+        for x in (0..width).step_by(size) {
+            // Retrieve the RGB value of the pixel at (x, y).
+            let rgb = get_pixel(&source, x, y);
+
+            // If the pixel is out of bounds or cannot be retrieved, skip to the next iteration.
+            if rgb.is_none() {
+                continue;
+            } else {
+                // Unwrap the RGB value (since it's guaranteed to exist at this point).
+                let rgb = rgb.unwrap();
+
+                // Push the R, G, and B channels of the pixel into the byte data vector.
+                byte_data.push(rgb[0]); // Red channel
+                byte_data.push(rgb[1]); // Green channel
+                byte_data.push(rgb[2]); // Blue channel
+            }
+        }
+    }
+
+    // If this is the final frame, truncate the byte data to the specified length (`final_byte`).
+    if current_frame == final_frame {
+        // Slice the byte data to retain only the first `final_byte` elements.
+        let slice = byte_data[0..final_byte as usize].to_vec();
+        return Ok(slice); // Return the truncated byte data.
+    }
+
+    // Return the full byte data for non-final frames.
+    Ok(byte_data)
+}
