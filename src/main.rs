@@ -1,5 +1,3 @@
-use actix_web::{web, App, HttpServer, Responder};
-
 mod args;
 mod etcher;
 mod models;
@@ -10,38 +8,48 @@ mod tasks;
 mod timer;
 
 // Embed route handler
-async fn embed_handler(params: web::Json<models::EmbedParams>) -> impl Responder {
-    match tasks::embed::run_embed(params.into_inner()).await {
-        Ok(_) => "Embed operation succeeded".into(),
-        Err(e) => format!("Error: {:?}", e).into(),
-    }
-}
+/// The entry point of the application.
+///
+/// This tool, "Infinite Storage Glitch (ISG)," allows users to encode files as
+/// videos for storage on YouTube, which are later retrievable without data loss.
+///
+/// The user workflow includes:
+/// 1. Zipping files to prepare for encoding.
+/// 2. Using the embed option to convert the archive into a video.
+/// 3. Uploading the resulting video to YouTube.
+/// 4. Downloading the video from YouTube when needed.
+/// 5. Using the dislodge option to extract the original files from the video.
+///
+/// # Returns
+/// * `anyhow::Result<()>` - Indicates success or failure during execution.
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Welcome message explaining the tool's functionality.
+    println!("Welcome to ISG (Infinite Storage Glitch)");
+    println!("This tool allows you to turn any file into a compression-resistant video that can be uploaded to YouTube for Infinite Storage:tm:");
 
-// Download route handler
-async fn download_handler(params: web::Json<models::DownloadParams>) -> impl Responder {
-    match tasks::download::run_download(params.into_inner()).await {
-        Ok(_) => "Download operation succeeded".into(),
-        Err(e) => format!("Error: {:?}", e).into(),
-    }
-}
+    // Instructions for the user on how to use the tool.
+    println!("\nHow to use:");
+    println!("1. Zip all the files you will be uploading"); // Step 1: Prepare files
+    println!("2. Use the embed option on the archive (THE VIDEO WILL BE SEVERAL TIMES LARGER THAN THE FILE, 4x in case of optimal compression resistance preset)"); // Step 2: Encode as video
+    println!(
+        "3. Upload the video to your YouTube channel. You probably want to keep it up as unlisted"
+    ); // Step 3: Upload to YouTube
+    println!("4. Use the download option to get the video back"); // Step 4: Download the video
+    println!("5. Use the dislodge option to get your files back from the downloaded video"); // Step 5: Extract files
+    println!("6. PROFIT\n"); // Step 6: Enjoy!
 
-// Dislodge route handler
-async fn dislodge_handler(params: web::Json<models::DislodgeParams>) -> impl Responder {
-    match tasks::dislodge::run_dislodge(params.into_inner()).await {
-        Ok(_) => "Dislodge operation succeeded".into(),
-        Err(e) => format!("Error: {:?}", e).into(),
-    }
-}
+    // Parse command-line arguments using the `Arguments` struct.
+    let mut args = Arguments::parse();
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .route("/embed", web::post().to(embed_handler))
-            .route("/download", web::post().to(download_handler))
-            .route("/dislodge", web::post().to(dislodge_handler))
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    // Enhance the parsed arguments by interacting with the user through the UI.
+    // This step may include prompting for missing arguments.
+    let new_command = ui::enrich_arguments(args.command).await?;
+    args.command = Some(new_command);
+
+    // Execute the appropriate tasks based on the parsed and enriched arguments.
+    tasks::run_by_arguments(args).await?;
+
+    // Return success if everything went fine.
+    Ok(())
 }

@@ -53,6 +53,34 @@ pub enum EmbedOutputMode {
     Binary,
 }
 
+/// Implements conversion from `EmbedOutputMode` to `OutputMode`.
+/// This allows seamless conversion between these types,
+/// enabling cleaner and more expressive code when working with embedding operations.
+impl From<EmbedOutputMode> for crate::settings::OutputMode {
+    /// Converts an instance of `EmbedOutputMode` to `OutputMode`.
+    ///
+    /// # Arguments
+    /// * `value` - The `EmbedOutputMode` variant to be converted.
+    ///
+    /// # Returns
+    /// * An equivalent `OutputMode` variant.
+    ///
+    /// # Example
+    /// ```
+    /// let embed_mode = EmbedOutputMode::Colored;
+    /// let output_mode: OutputMode = embed_mode.into();
+    /// ```
+    fn from(value: EmbedOutputMode) -> Self {
+        match value {
+            // Map the `Colored` variant of `EmbedOutputMode` to `Color` in `OutputMode`.
+            EmbedOutputMode::Colored => Self::Color,
+            // Map the `Binary` variant of `EmbedOutputMode` to `Binary` in `OutputMode`.
+            EmbedOutputMode::Binary => Self::Binary,
+        }
+    }
+}
+
+
 /// Parameters specific to the `embed` subcommand, which handles embedding data into a video.
 /// All fields are optional, and defaults may be applied based on the user interface or runtime logic.
 #[derive(Args, Default, Debug)]

@@ -455,3 +455,339 @@ fn read_color(
     // Return the full byte data for non-final frames.
     Ok(byte_data)
 }
+
+/// Generates etching instructions for encoding data into an image source.
+/// Depending on the output mode (Color or Binary), this function computes the frame
+/// and pixel positions where the data embedding ends.
+///
+/// # Arguments
+/// * `settings` - Configuration settings for the etching process.
+/// * `data` - The data to be embedded into the image source.
+///
+/// # Returns
+/// * `EmbedSource` containing the embedded instructions as an image.
+fn etch_instructions(settings: &Settings, data: &Data) -> anyhow::Result<EmbedSource> {
+    // Size of the instruction block in pixels
+    let instruction_size = 5;
+
+    // List of 32-bit instructions to store embedding metadata
+    let mut u32_instructions: Vec<u32> = Vec::new();
+
+    // Calculate the number of pixels in a single frame
+    let frame_size = (settings.height * settings.width) as usize;
+
+    // Determine the final frame and pixel position based on the output mode
+    match data.out_mode {
+        OutputMode::Color => {
+            // Color mode marker: `u32::MAX`
+            u32_instructions.push(u32::MAX);
+
+            let frame_data_size = frame_size / settings.size.pow(2) as usize;
+            let final_byte = data.bytes.len() % frame_data_size;
+            let mut final_frame = data.bytes.len() / frame_data_size;
+
+            // Handle edge case: increment frame if data length perfectly matches frame size
+            if data.bytes.len() % frame_size != 0 {
+                final_frame += 1;
+            }
+
+            // Debugging final frame position
+            dbg!(final_frame);
+            u32_instructions.push(final_frame as u32);
+            u32_instructions.push(final_byte as u32);
+        }
+        OutputMode::Binary => {
+            // Binary mode marker: `u32::MIN`
+            u32_instructions.push(u32::MIN);
+
+            let frame_data_size = frame_size / settings.size.pow(2) as usize;
+            let final_byte = data.binary.len() % frame_data_size;
+            let mut final_frame = data.binary.len() / frame_data_size;
+
+            // Handle edge case: increment frame if data length perfectly matches frame size
+            if data.binary.len() % frame_size != 0 {
+                final_frame += 1;
+            }
+
+            // Debugging final frame position
+            dbg!(final_frame);
+            u32_instructions.push(final_frame as u32);
+            u32_instructions.push(final_byte as u32);
+        }
+    }
+
+    // Include the pixel block size in instructions
+    u32_instructions.push(settings.size as u32);
+    // End marker for size readability; this marker might be required for compatibility
+    u32_instructions.push(u32::MAX);
+
+    // Convert instructions into binary format for embedding
+    let instruction_data = rip_binary_u32(u32_instructions)?;
+
+    // Create a new image source to store the instructions
+    let mut source = EmbedSource::new(instruction_size, settings.width, settings.height);
+    let mut index = 0;
+
+    // Attempt to etch instructions onto the source; handle potential errors
+    match etch_bw(&mut source, &instruction_data, &mut index) {
+        Ok(_) => {}
+        Err(_) => {
+            println!("Instructions written");
+        }
+    }
+
+    // Optional display code (commented out for typical use cases)
+    // Uncomment for debugging visualization
+    // highgui::named_window("window", WINDOW_FULLSCREEN)?;
+    // highgui::imshow("window", &source.image)?;
+    // highgui::wait_key(10000000)?;
+
+    // Save the resulting image for verification
+    // imwrite("src/out/test1.png", &source.image, &Vector::new())?;
+
+    Ok(source)
+}
+
+/// Reads and parses embedding instructions from the given `EmbedSource`.
+///
+/// This function extracts metadata necessary for decoding the embedded data,
+/// such as output mode, final frame, and byte positions, and constructs appropriate settings.
+///
+/// # Arguments
+/// * `source` - The source from which instructions are read.
+/// * `threads` - The number of threads for parallel processing.
+///
+/// # Returns
+/// * A tuple containing:
+///   - `OutputMode` indicating the type of output (Color or Binary)
+///   - `final_frame` indicating the last frame with embedded data
+///   - `final_byte` indicating the last byte position in the final frame
+///   - `Settings` instance with configuration for the decoding process
+fn read_instructions(
+    source: &EmbedSource,
+    threads: usize,
+) -> anyhow::Result<(OutputMode, i32, i32, Settings)> {
+    // Read binary data from the first frame of the source
+    // This retrieves the raw binary encoding of the instructions
+    let binary_data = read_bw(source, 0, 1, 0)?;
+    
+    // Convert the binary data into a vector of 32-bit unsigned integers
+    let u32_data = translate_u32(binary_data)?;
+
+    // Extract and interpret the output mode from the first instruction value
+    let out_mode = match u32_data[0] {
+        u32::MAX => OutputMode::Color,  // Color mode marker
+        _ => OutputMode::Binary,       // Default to Binary mode
+    };
+
+    // Extract the final frame index for the embedded data
+    let final_frame = u32_data[1] as i32;
+    
+    // Extract the byte position within the final frame
+    let final_byte = u32_data[2] as i32;
+    
+    // Extract the pixel block size for encoding
+    let size = u32_data[3] as i32;
+
+    // Retrieve source dimensions (height and width)
+    let height = source.frame_size.height;
+    let width = source.frame_size.width;
+
+    // Create the settings object for decoding, using the extracted size and provided thread count
+    let settings = Settings::new(size, threads, 1337, width, height);
+
+    // Return the parsed instructions and settings
+    Ok((out_mode, final_frame, final_byte, settings))
+}
+
+
+/// Embeds data into a video file using multi-threaded frame generation.
+///
+/// # Arguments
+/// * `path` - Path to the output video file.
+/// * `data` - Data to embed in the video.
+/// * `settings` - Configuration for the embedding process.
+///
+/// # Returns
+/// * `anyhow::Result<()>` - Ok on success or an error on failure.
+pub fn etch(path: &str, data: Data, settings: Settings) -> anyhow::Result<()> {
+    let _timer = Timer::new("Etching video");
+
+    let mut spool = Vec::new();
+
+    match data.out_mode {
+        OutputMode::Color => {
+            let length = data.bytes.len();
+
+            // Compute sizes for frame data and chunk data for threads
+            let frame_size = (settings.width * settings.height) as usize;
+            let frame_data_size = frame_size / settings.size.pow(2) as usize * 3;
+            let frame_length = length / frame_data_size;
+            let chunk_frame_size = (frame_length / settings.threads) + 1;
+            let chunk_data_size = chunk_frame_size * frame_data_size;
+
+            // Divide data into chunks and spawn threads for parallel processing
+            for chunk in data.bytes.chunks(chunk_data_size) {
+                let chunk_copy = chunk.to_vec();
+
+                let thread = thread::spawn(move || {
+                    let mut frames = Vec::new();
+                    let mut index: usize = 0;
+
+                    // Generate frames and push to the frame list
+                    loop {
+                        let mut source = EmbedSource::new(settings.size, settings.width, settings.height);
+                        match etch_color(&mut source, &chunk_copy, &mut index) {
+                            Ok(_) => frames.push(source),
+                            Err(_) => {
+                                frames.push(source);
+                                println!("Embedding thread complete!");
+                                break;
+                            }
+                        }
+                    }
+
+                    frames
+                });
+
+                spool.push(thread);
+            }
+        }
+        OutputMode::Binary => {
+            let length = data.binary.len();
+
+            let frame_size = (settings.width * settings.height) as usize;
+            let frame_data_size = frame_size / settings.size.pow(2) as usize;
+            let frame_length = length / frame_data_size;
+            let chunk_frame_size = (frame_length / settings.threads) + 1;
+            let chunk_data_size = chunk_frame_size * frame_data_size;
+
+            for chunk in data.binary.chunks(chunk_data_size) {
+                let chunk_copy = chunk.to_vec();
+
+                let thread = thread::spawn(move || {
+                    let mut frames = Vec::new();
+                    let mut index: usize = 0;
+
+                    loop {
+                        let mut source = EmbedSource::new(settings.size, settings.width, settings.height);
+                        match etch_bw(&mut source, &chunk_copy, &mut index) {
+                            Ok(_) => frames.push(source),
+                            Err(_) => {
+                                frames.push(source);
+                                println!("Embedding thread complete!");
+                                break;
+                            }
+                        }
+                    }
+
+                    frames
+                });
+
+                spool.push(thread);
+            }
+        }
+    }
+
+    let mut complete_frames = Vec::new();
+
+    // Generate the instructional frame and add it to the frame list
+    let instructional_frame = etch_instructions(&settings, &data)?;
+    complete_frames.push(instructional_frame);
+
+    // Collect all frames from the threads
+    for thread in spool {
+        let frame_chunk = thread.join().unwrap();
+        complete_frames.extend(frame_chunk);
+    }
+
+    // Attempt to use a lossless codec (PNG)
+    let fourcc = VideoWriter::fourcc('p', 'n', 'g', ' ')?;
+
+    // Determine frame size based on the first frame in the list
+    let frame_size = complete_frames[1].frame_size;
+    let video = VideoWriter::new(path, fourcc, settings.fps, frame_size, true);
+
+    // Fallback to an alternative codec if PNG fails
+    let mut video = match video {
+        Ok(v) => v,
+        Err(_) => {
+            let fourcc = VideoWriter::fourcc('a', 'v', 'c', '1')?;
+            VideoWriter::new(path, fourcc, settings.fps, frame_size, true)
+                .expect("Both PNG and AVC1 codecs failed. Please raise an issue on GitHub.")
+        }
+    };
+
+    // Write all frames to the video
+    for frame in complete_frames {
+        let image = frame.image;
+        video.write(&image)?;
+    }
+    video.release()?;
+
+    println!("Video embedded successfully at {}", path);
+
+    Ok(())
+}
+
+/// Reads embedded data from a video file.
+///
+/// # Arguments
+/// * `path` - Path to the input video file.
+/// * `threads` - Number of threads to use for decoding.
+///
+/// # Returns
+/// * `anyhow::Result<Vec<u8>>` - Returns the embedded byte data or an error.
+pub fn read(path: &str, threads: usize) -> anyhow::Result<Vec<u8>> {
+    let _timer = Timer::new("Dislodging frame");
+    const INSTRUCTION_SIZE: usize = 5;
+
+    // Open the video file
+    let mut video = VideoCapture::from_file(path, CAP_ANY)
+        .expect("Could not open video path");
+    let mut frame = Mat::default();
+
+    // Read the first frame for instructions
+    video.read(&mut frame)?;
+    let instruction_source = EmbedSource::from(
+        frame.clone(), 
+        INSTRUCTION_SIZE, 
+        true
+    ).expect("Couldn't create instructions");
+
+    let (out_mode, final_frame, final_byte, settings) =
+        read_instructions(&instruction_source, threads)?;
+
+    let mut byte_data = Vec::new();
+    let mut current_frame = 1;
+
+    // Loop through video frames and extract embedded data
+    while video.read(&mut frame)? && frame.cols() > 0 {
+        if current_frame % 20 == 0 {
+            println!("On frame: {}", current_frame);
+        }
+
+        let source = EmbedSource::from(
+            frame.clone(), 
+            settings.size, 
+            false
+        ).expect("Reading frame failed");
+
+        // Read and decode frame data based on the output mode
+        let frame_data = match out_mode {
+            OutputMode::Color => read_color(&source, current_frame, i32::MAX, final_byte)
+                .expect("Failed to read color frame"),
+            OutputMode::Binary => {
+                let binary_data = read_bw(&source, current_frame, final_frame, final_byte)
+                    .expect("Failed to read binary frame");
+                translate_u8(binary_data).expect("Failed to translate binary data")
+            }
+        };
+
+        byte_data.extend(frame_data);
+        current_frame += 1;
+    }
+
+    println!("Video read successfully");
+    Ok(byte_data)
+}
