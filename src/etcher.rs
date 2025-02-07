@@ -1,12 +1,13 @@
 use std::{fs, thread, vec};
 
-use anyhow::{anyhow, Error};
-use opencv::core::prelude::*;
-use opencv::core::{Mat, MatTraitConst};
+use anyhow::{anyhow, Error}; //anyhow::Error::msg("My err");
+
+use opencv::core::Mat;
+use opencv::prelude::*;
 use opencv::videoio::{VideoCapture, VideoWriter, CAP_ANY};
 
-use crate::settings::{Data, OutputMode, Settings};
 use crate::source::EmbedSource;
+use crate::settings::{Data, OutputMode, Settings};
 use crate::timer::Timer;
 
 /// Reads bytes from a file specified by `path`.
@@ -570,22 +571,22 @@ fn read_instructions(
     // Read binary data from the first frame of the source
     // This retrieves the raw binary encoding of the instructions
     let binary_data = read_bw(source, 0, 1, 0)?;
-    
+
     // Convert the binary data into a vector of 32-bit unsigned integers
     let u32_data = translate_u32(binary_data)?;
 
     // Extract and interpret the output mode from the first instruction value
     let out_mode = match u32_data[0] {
-        u32::MAX => OutputMode::Color,  // Color mode marker
+        u32::MAX => OutputMode::Color, // Color mode marker
         _ => OutputMode::Binary,       // Default to Binary mode
     };
 
     // Extract the final frame index for the embedded data
     let final_frame = u32_data[1] as i32;
-    
+
     // Extract the byte position within the final frame
     let final_byte = u32_data[2] as i32;
-    
+
     // Extract the pixel block size for encoding
     let size = u32_data[3] as i32;
 
@@ -599,7 +600,6 @@ fn read_instructions(
     // Return the parsed instructions and settings
     Ok((out_mode, final_frame, final_byte, settings))
 }
-
 
 /// Embeds data into a video file using multi-threaded frame generation.
 ///
@@ -636,7 +636,8 @@ pub fn etch(path: &str, data: Data, settings: Settings) -> anyhow::Result<()> {
 
                     // Generate frames and push to the frame list
                     loop {
-                        let mut source = EmbedSource::new(settings.size, settings.width, settings.height);
+                        let mut source =
+                            EmbedSource::new(settings.size, settings.width, settings.height);
                         match etch_color(&mut source, &chunk_copy, &mut index) {
                             Ok(_) => frames.push(source),
                             Err(_) => {
@@ -670,7 +671,8 @@ pub fn etch(path: &str, data: Data, settings: Settings) -> anyhow::Result<()> {
                     let mut index: usize = 0;
 
                     loop {
-                        let mut source = EmbedSource::new(settings.size, settings.width, settings.height);
+                        let mut source =
+                            EmbedSource::new(settings.size, settings.width, settings.height);
                         match etch_bw(&mut source, &chunk_copy, &mut index) {
                             Ok(_) => frames.push(source),
                             Err(_) => {
@@ -740,20 +742,16 @@ pub fn etch(path: &str, data: Data, settings: Settings) -> anyhow::Result<()> {
 /// * `anyhow::Result<Vec<u8>>` - Returns the embedded byte data or an error.
 pub fn read(path: &str, threads: usize) -> anyhow::Result<Vec<u8>> {
     let _timer = Timer::new("Dislodging frame");
-    const INSTRUCTION_SIZE: usize = 5;
+    const INSTRUCTION_SIZE: i32 = 5;
 
     // Open the video file
-    let mut video = VideoCapture::from_file(path, CAP_ANY)
-        .expect("Could not open video path");
+    let mut video = VideoCapture::from_file(path, CAP_ANY).expect("Could not open video path");
     let mut frame = Mat::default();
 
     // Read the first frame for instructions
     video.read(&mut frame)?;
-    let instruction_source = EmbedSource::from(
-        frame.clone(), 
-        INSTRUCTION_SIZE, 
-        true
-    ).expect("Couldn't create instructions");
+    let instruction_source = EmbedSource::from(frame.clone(), INSTRUCTION_SIZE, true)
+        .expect("Couldn't create instructions");
 
     let (out_mode, final_frame, final_byte, settings) =
         read_instructions(&instruction_source, threads)?;
@@ -767,11 +765,8 @@ pub fn read(path: &str, threads: usize) -> anyhow::Result<Vec<u8>> {
             println!("On frame: {}", current_frame);
         }
 
-        let source = EmbedSource::from(
-            frame.clone(), 
-            settings.size, 
-            false
-        ).expect("Reading frame failed");
+        let source =
+            EmbedSource::from(frame.clone(), settings.size, false).expect("Reading frame failed");
 
         // Read and decode frame data based on the output mode
         let frame_data = match out_mode {

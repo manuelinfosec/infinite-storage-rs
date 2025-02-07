@@ -141,11 +141,11 @@ impl Settings {
     /// # Use Cases
     /// - Configuring video encoding settings with specific resolution and FPS.
     /// - Setting up parameters for multi-threaded data processing.
-    pub fn new(size: i32, threads: usize, fps: f64, width: i32, height: i32) -> Self {
+    pub fn new(size: i32, threads: usize, fps: i32, width: i32, height: i32) -> Self {
         Settings {
             size,    // Block or data unit size.
             threads, // Number of threads for parallel processing.
-            fps,     // Frames per second for output.
+            fps: fps as f64,     // Frames per second for output.
             width,   // Width of the frame or resolution.
             height,  // Height of the frame or resolution.
         }

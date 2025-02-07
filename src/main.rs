@@ -1,11 +1,12 @@
 mod args;
 mod etcher;
-mod models;
-mod run;
 mod settings;
 mod source;
 mod tasks;
 mod timer;
+mod ui;
+
+use clap::Parser;
 
 // Embed route handler
 /// The entry point of the application.
@@ -25,7 +26,7 @@ mod timer;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Welcome message explaining the tool's functionality.
-    println!("Welcome to ISG (Infinite Storage Glitch)");
+    println!("Welcome to Video Embedding System");
     println!("This tool allows you to turn any file into a compression-resistant video that can be uploaded to YouTube for Infinite Storage:tm:");
 
     // Instructions for the user on how to use the tool.
@@ -40,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     println!("6. PROFIT\n"); // Step 6: Enjoy!
 
     // Parse command-line arguments using the `Arguments` struct.
-    let mut args = Arguments::parse();
+    let mut args = args::Arguments::parse();
 
     // Enhance the parsed arguments by interacting with the user through the UI.
     // This step may include prompting for missing arguments.
