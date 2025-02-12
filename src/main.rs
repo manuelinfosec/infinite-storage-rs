@@ -8,16 +8,15 @@ mod ui;
 
 use clap::Parser;
 
-// Embed route handler
 /// The entry point of the application.
 ///
-/// This tool, "Infinite Storage Glitch (ISG)," allows users to encode files as
+/// This tool, "Video Embedding System," allows users to encode files as
 /// videos for storage on YouTube, which are later retrievable without data loss.
 ///
 /// The user workflow includes:
 /// 1. Zipping files to prepare for encoding.
 /// 2. Using the embed option to convert the archive into a video.
-/// 3. Uploading the resulting video to YouTube.
+/// 3. Transmit or store the generated video securely
 /// 4. Downloading the video from YouTube when needed.
 /// 5. Using the dislodge option to extract the original files from the video.
 ///
@@ -26,19 +25,21 @@ use clap::Parser;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Welcome message explaining the tool's functionality.
-    println!("Welcome to Video Embedding System");
-    println!("This tool allows you to turn any file into a compression-resistant video that can be uploaded to YouTube for Infinite Storage:tm:");
+    println!("Welcome to the Video Embedding System");
+    println!("This system enables secure data transmission by converting files into a video format resistant to compression artifacts.");
 
-    // Instructions for the user on how to use the tool.
-    println!("\nHow to use:");
-    println!("1. Zip all the files you will be uploading"); // Step 1: Prepare files
-    println!("2. Use the embed option on the archive (THE VIDEO WILL BE SEVERAL TIMES LARGER THAN THE FILE, 4x in case of optimal compression resistance preset)"); // Step 2: Encode as video
+    // Providing a structured guide for users
+    println!("\nUsage Instructions:");
     println!(
-        "3. Upload the video to your YouTube channel. You probably want to keep it up as unlisted"
-    ); // Step 3: Upload to YouTube
-    println!("4. Use the download option to get the video back"); // Step 4: Download the video
-    println!("5. Use the dislodge option to get your files back from the downloaded video"); // Step 5: Extract files
-    println!("6. PROFIT\n"); // Step 6: Enjoy!
+        "1. Prepare your files by archiving them into a single compressed format (e.g., ZIP)."
+    );
+    println!("2. Use the 'Embed' option to encode the archive into a video file.");
+    println!("3. Transmit or store the generated video securely.");
+    println!("4. Use the 'Download' option to retrieve the video file.");
+    println!("5. Use the 'Dislodge' option to extract the original files from the encoded video.");
+    println!("6. Ensure data integrity and verify successful extraction.\n");
+
+    println!("For optimal results, choose the appropriate encoding settings based on your security and efficiency requirements.");
 
     // Parse command-line arguments using the `Arguments` struct.
     let mut args = args::Arguments::parse();
